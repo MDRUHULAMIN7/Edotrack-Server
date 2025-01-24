@@ -36,6 +36,7 @@ async function run() {
 const datbase = client.db("EduTrack");
 const usersCollection = datbase.collection('users')
 const collegesCollection = datbase.collection('colleges')
+const admissionsCollection = datbase.collection('admissions')
    
 
     // post user data 
@@ -78,13 +79,13 @@ const collegesCollection = datbase.collection('colleges')
   
     app.get('/colleges-6', async (req, res) => {
       try {
-        const result = await collegesCollection.find().limit(6).toArray();
+        const result = await collegesCollection.find().limit(3).toArray();
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: 'Error fetching colleges', error: error.message });
       }
     });
-    // serch college 
+    // search college 
     app.get("/colleges", async (req, res) => {
       const searchQuery = req.query.search;
     
@@ -115,23 +116,22 @@ const collegesCollection = datbase.collection('colleges')
     // get college by id
 
     app.get('/colleges/:id', async (req, res) => {
-      const { id } = req.params; // Get the id from the URL
-      console.log('College ID:', id); // Debugging the id
+      const { id } = req.params;
+      console.log('College ID:', id); 
     
       try {
-        // Convert the string 'id' into a valid ObjectId for MongoDB
+    
         const query = { _id: new ObjectId(id) }; 
         
-        // Query the collection using the ObjectId
+      
         const college = await collegesCollection.findOne(query);
     
         if (!college) {
           return res.status(404).send('College not found');
         }
     
-        console.log('Found college:', college); // Debugging the response
+        
     
-        // Send the college data as a response
         res.json(college); 
       } catch (err) {
         console.error('Error fetching college details:', err);
@@ -139,13 +139,62 @@ const collegesCollection = datbase.collection('colleges')
       }
     });
     
+    // college name 
+    app.get('/colleges-name', async (req, res) => {
+      try {
+        const result = await collegesCollection.find().toArray();
+        
+        const collegeNames = result.map(college => college.name);
+        res.send(collegeNames);
+      } catch (err) {
+        res.status(500).send({ error: 'Failed to fetch colleges' });
+      }
+    });
     
+    // save applications 
+    app.post('/submit', async (req, res) => {
+      const { name, subject, email, phone, address, dob, image, selectedCollege } = req.body;
     
-  
+      try {
+      
+        const existingApplication = await admissionsCollection.findOne({
+          email: email,
+          phone: phone,
+          selectedCollege: selectedCollege,
+        });
+    
+        if (existingApplication) {
+      
+          return res.status(400).json({ message: 'You have already applied to this college.' });
+        }
+    
+     
+        const newApplication = {
+          name,
+          subject,
+          email,
+          phone,
+          address,
+          dob,
+          image,
+          selectedCollege,
+          dateApplied: new Date(),  
+        };
+    
+        const result = await admissionsCollection.insertOne(newApplication);
+    
+     
+        res.status(200).json({ message: 'Application submitted successfully!', applicationId: result.insertedId });
+      } catch (err) {
+        console.error('Error submitting application:', err);
+        res.status(500).json({ message: 'Server error. Please try again later.' });
+      }
+    });
+    
 
     console.log("EduTrack successfully connected to MongoDB!");
   } finally {
-    // Ensures that the client will close when you finish/error
+    
    
   }
 }
