@@ -361,6 +361,56 @@ const reviewsCollection = datbase.collection('reviews')
         res.status(500).json({ message: "Failed to fetch user." });
       }
     });
+
+    // update user profile
+    app.post('/update-profile', async (req, res) => {
+      const { email, newEmail, name, university, address, image } = req.body;
+    
+      
+      if (!email || !newEmail) {
+        return res.status(400).json({ message: 'Both current and new email are required.' });
+      }
+    
+      try {
+    
+        const existingUser = await usersCollection.findOne({ email: email });
+    
+        if (!existingUser) {
+          return res.status(404).json({ message: 'User not found.' });
+        }
+    
+      
+        const updatedUser = {
+          name: name || existingUser.name,
+        
+          university: university || existingUser.university,
+          address: address || existingUser.address,
+          photo: image || existingUser.image,
+        };
+    
+      
+        const result = await usersCollection.updateOne(
+          { email: email },
+          { $set: updatedUser }
+        );
+    
+        if (result.modifiedCount === 0) {
+          return res.status(400).json({
+            message: 'No changes were made. Please ensure you have updated the profile details.',
+          });
+        }
+    
+        res.status(200).json({
+          message: 'Profile updated successfully!',
+          updatedData: updatedUser,
+        });
+      } catch (err) {
+        console.error('Error updating profile:', err);
+        res.status(500).json({
+          message: 'Server error. Please try again later.',
+        });
+      }
+    });
     
 
 
