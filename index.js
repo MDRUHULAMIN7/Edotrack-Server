@@ -37,6 +37,7 @@ const datbase = client.db("EduTrack");
 const usersCollection = datbase.collection('users')
 const collegesCollection = datbase.collection('colleges')
 const admissionsCollection = datbase.collection('admissions')
+const reviewsCollection = datbase.collection('reviews')
    
 
     // post user data 
@@ -151,9 +152,27 @@ const admissionsCollection = datbase.collection('admissions')
       }
     });
     
-    // save applications 
+    // save applications admissions
     app.post('/submit', async (req, res) => {
       const { name, subject, email, phone, address, dob, image, selectedCollege } = req.body;
+    
+      const missingFields = [];
+    
+      if (!name) missingFields.push('name');
+      if (!subject) missingFields.push('subject');
+      if (!email) missingFields.push('email');
+      if (!phone) missingFields.push('phone');
+      if (!address) missingFields.push('address');
+      if (!dob) missingFields.push('dob');
+      if (!image) missingFields.push('image');
+      if (!selectedCollege) missingFields.push('selectedCollege');
+    
+    
+      if (missingFields.length > 0) {
+        return res.status(400).json({ 
+          message: `The following fields are missing: ${missingFields.join(', ')}. Please provide all required fields.` 
+        });
+      }
     
       try {
       
@@ -164,11 +183,12 @@ const admissionsCollection = datbase.collection('admissions')
         });
     
         if (existingApplication) {
-      
-          return res.status(400).json({ message: 'You have already applied to this college.' });
+          return res.status(400).json({ 
+            message: 'You have already applied to this college.' 
+          });
         }
     
-     
+       
         const newApplication = {
           name,
           subject,
@@ -178,19 +198,152 @@ const admissionsCollection = datbase.collection('admissions')
           dob,
           image,
           selectedCollege,
-          dateApplied: new Date(),  
+          dateApplied: new Date(),
         };
     
+      
         const result = await admissionsCollection.insertOne(newApplication);
     
-     
-        res.status(200).json({ message: 'Application submitted successfully!', applicationId: result.insertedId });
+
+        res.status(200).json({ 
+          message: 'Application submitted successfully!', 
+          applicationId: result.insertedId 
+        });
       } catch (err) {
         console.error('Error submitting application:', err);
-        res.status(500).json({ message: 'Server error. Please try again later.' });
+        res.status(500).json({ 
+          message: 'Server error. Please try again later.' 
+        });
       }
     });
     
+
+    // get my-colleges
+    app.get('/my-colleges/:userEmail', async (req, res) => {
+      const { userEmail } = req.params;
+    
+      try {
+        const userApplications = await admissionsCollection.find({ email: userEmail }).toArray();
+        res.json(userApplications);
+      } catch (err) {
+        console.error('Error fetching user applications:', err);
+        res.status(500).send('Error fetching user applications');
+      }
+    });
+    
+    // add review
+
+    app.post('/submit-review', async (req, res) => {
+      const { collegeId, review, rating, userEmail, collegeName } = req.body;
+    
+      // Validate the data
+      if (!collegeId || !review || !rating || !userEmail || !collegeName) {
+        return res.status(400).json({ message: 'All fields are required.' });
+      }
+    
+      try {
+        // Prepare the review object
+        const newReview = {
+          collegeId,
+          collegeName,
+          review,
+          rating,
+          userEmail,
+          date: new Date().toLocaleString(), // Add a human-readable timestamp
+        };
+    
+        // Insert the review into the reviews collection
+        const result = await reviewsCollection.insertOne(newReview);
+    
+        if (result.acknowledged) {
+          return res
+            .status(200)
+            .json({ message: 'Review submitted successfully!', reviewId: result.insertedId });
+        } else {
+          throw new Error('Failed to submit review');
+        }
+      } catch (err) {
+        console.error('Error submitting review:', err);
+        res.status(500).json({ message: 'Server error. Please try again later.' });
+      }
+    });
+
+    // get revies 
+    app.get("/reviews/:collegeId", async (req, res) => {
+      const { collegeId } = req.params;
+    
+      try {
+        
+        const reviews = await reviewsCollection.find({ collegeId }).toArray();
+    
+        if (!reviews || reviews.length === 0) {
+          return res.status(404).json({ message: "No reviews found for this college." });
+        }
+    
+   
+        res.status(200).json(reviews);
+      } catch (error) {
+        console.error("Error fetching reviews:", error);
+        res.status(500).json({ message: "Failed to fetch reviews." });
+      }
+    });
+    
+    // delete review
+    app.delete("/reviews/:reviewId", async (req, res) => {
+      const { reviewId } = req.params;
+    
+      try {
+       
+        const result = await reviewsCollection.deleteOne({ _id: new ObjectId(reviewId) });
+    
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: "Review not found or already deleted." });
+        }
+    
+        res.status(200).json({ message: "Review deleted successfully!" });
+      } catch (error) {
+        console.error("Error deleting review:", error);
+        res.status(500).json({ message: "Failed to delete review." });
+      }
+    });
+
+    // get review
+    app.get("/reviews", async (req, res) => {
+      try {
+    
+        const reviews = await reviewsCollection.find().toArray();
+    
+        if (!reviews || reviews.length === 0) {
+          return res.status(404).json({ message: "No reviews found." });
+        }
+    
+     
+        const reviewsWithUserData = await Promise.all(
+          reviews.map(async (review) => {
+          
+            const user = await usersCollection.findOne({ email: review.userEmail });
+    
+          
+            if (user) {
+              return {
+                ...review,
+                userName: user.name,
+                userPhoto: user.photo,
+              };
+            }
+    
+            return review;
+          })
+        );
+    
+        res.status(200).json(reviewsWithUserData);
+      } catch (error) {
+        console.error("Error fetching reviews:", error);
+        res.status(500).json({ message: "Failed to fetch reviews." });
+      }
+    });
+    
+
 
     console.log("EduTrack successfully connected to MongoDB!");
   } finally {
